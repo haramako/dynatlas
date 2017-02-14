@@ -1,5 +1,5 @@
-/dynatlas/dynatlas/Library
-/dynatlas/dynatlas/Temp
+/unity/Library
+/unity/Temp
 *.csproj
 *.sln
 .vs
