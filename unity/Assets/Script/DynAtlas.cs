@@ -1,9 +1,13 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+#if UNITY_5_5_OR_NEWER
+using UnityEngine.Profiling;
+#endif
 
-public class DynAtlas {
+public partial class DynAtlas {
 
     int size_ = 2048;
     Texture2D tex_;
@@ -13,12 +17,20 @@ public class DynAtlas {
     Dictionary<string, Sprite> sprites_ = new Dictionary<string,Sprite>();
 
     bool dirty_;
+	Packer packer_;
+
+	static public TextureFormat DefaultTextureFormat()
+	{
+		return TextureFormat.ETC_RGB4;
+	}
+		
 
     public DynAtlas(int size)
     {
         size_ = size;
         tex_ = new Texture2D(size_, size_, TextureFormat.ETC_RGB4, false);
-        data_ = new RawTex(size_, size_);
+		data_ = new RawTex(DefaultTextureFormat(), size_, size_);
+		packer_ = new Packer (size_, size_);
     }
 
     public Texture2D Texture { get { return tex_; } }
@@ -28,62 +40,45 @@ public class DynAtlas {
         return (ushort)((n << 8) | (n >> 8));
     }
 
-    public void Load(string spriteName, Stream s)
+	public enum FileType
+	{
+		TSP,
+		PKM,
+	}
+
+	public void Load(string filename, string spriteName = null ){
+		if( spriteName == null ){
+			spriteName = Path.GetFileNameWithoutExtension (filename);
+		}
+		using( var stream = File.OpenRead(filename) ){
+			Load (spriteName, RawTex.FileTypeOfFilename(filename), stream);
+		}
+	}
+
+    public void Load(string spriteName, FileType fileType, Stream s)
     {
-        using (var r = new BinaryReader(s))
-        {
-            Profiler.BeginSample("load");
-            var magic = r.ReadBytes(4);
-            var foramt = r.ReadByte();
-            var width = r.ReadUInt16();
-            var height = r.ReadUInt16();
-            var data = r.ReadBytes(width * height / 2);
+        Profiler.BeginSample("load");
+		RawTex rawtex = RawTex.Load(fileType, s);
+        Profiler.EndSample();
 
-            var rawtex = new RawTex(width, height, data);
-            Profiler.EndSample();
+		var pos = packer_.Add (rawtex.Width, rawtex.Height);
 
-            Profiler.BeginSample("copy");
-            rawtex.CopyRect(0, 0, width, height, data_, 0, 0);
-            Profiler.EndSample();
+        Profiler.BeginSample("copy");
+		rawtex.CopyRect(0, 0, rawtex.Width, rawtex.Height, data_, (int)pos.x, (int)pos.y);
+        Profiler.EndSample();
 
-            var sprite = Sprite.Create(tex_, new Rect(0, 0, width, height), new Vector2(width / 2f, height / 2f));
-            sprite.associatedAlphaSplitTexture
-            sprites_[spriteName] = sprite;
+		var sprite = Sprite.Create(
+			tex_, 
+			new Rect(pos.x, pos.y, rawtex.Width, rawtex.Height), 
+			new Vector2(rawtex.Width / 2f, rawtex.Height / 2f), 
+			100f, 0, SpriteMeshType.FullRect);
+		
+        sprites_[spriteName] = sprite;
 
-            dirty_ = true;
-        }
+        dirty_ = true;
 
     }
 
-#if false
-    public void Load2(string spriteName, Stream s)
-    {
-        using (var r = new BinaryReader(s))
-        {
-            Profiler.BeginSample("load");
-            var magic = r.ReadBytes(4);
-            var version = r.ReadBytes(2);
-            var foramt = r.ReadBytes(2);
-            var extendedWidth = ntol(r.ReadUInt16());
-            var extendedHeight = ntol(r.ReadUInt16());
-            var origWidth = ntol(r.ReadUInt16());
-            var origHeight = ntol(r.ReadUInt16());
-            var data = r.ReadBytes(extendedWidth * extendedHeight / 2);
-
-            var rawtex = new RawTex(extendedWidth, extendedHeight, data);
-            Profiler.EndSample();
-
-            Profiler.BeginSample("copy");
-            rawtex.CopyRect(0, 0, extendedWidth, extendedHeight, data_, 0, 0);
-            Profiler.EndSample();
-
-            sprites_[spriteName] = Sprite.Create(tex_, new Rect(0, 0, extendedWidth, extendedHeight), new Vector2(extendedWidth / 2f, extendedHeight / 2f));
-
-            dirty_ = true;
-        }
-
-    }
-#endif
     public void ApplyChanges()
     {
         if( dirty_ )
@@ -100,125 +95,17 @@ public class DynAtlas {
         }
     }
 
-    public Sprite FindSprite(string name)
-    {
-        Sprite found;
-        if( sprites_.TryGetValue(name, out found))
-        {
-            return found;
-        }
-        else
-        {
-            return null;
-        }
-    }
+	public Sprite FindSprite(string name)
+	{
+		Sprite found;
+		if( sprites_.TryGetValue(name, out found))
+		{
+			return found;
+		}
+		else
+		{
+			return null;
+		}
+	}
 
-
-    public class RawTex
-    {
-        const int BlockLen = 4;
-        const int BlockSize = 8;
-
-        int width_;
-        int height_;
-        byte[] data_;
-
-        public byte[] Data { get { return data_; } }
-
-        public RawTex(int width, int height, byte[] data = null)
-        {
-            width_ = width;
-            height_ = height;
-            if (data != null)
-            {
-                data_ = data;
-            }
-            else
-            {
-                data_ = new byte[width_ * height_ / 2];
-            }
-        }
-
-        public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
-        {
-            int srcBX = srcX / BlockLen;
-            int srcBY = srcY / BlockLen;
-            int destBX = destX / BlockLen;
-            int destBY = destY / BlockLen;
-            int blockWidth = width / BlockLen;
-            int blockHeight = height / BlockLen;
-
-            for (int by = 0; by < blockHeight; by++)
-            {
-                for (int bx = 0; bx < blockWidth; bx++)
-                {
-                    var srcIndex = blockIndex(srcBX + bx, srcBY + by);
-                    var destIndex = dest.blockIndex(destBX + bx, destBY + by);
-                    //Debug.LogFormat("copy bx:{3} by:{4} src:{5:X} dest:{6:X} {0:X}=>{1:X}", srcIndex, destIndex, 0, bx, by, data_.Length, dest.data_.Length);
-                    System.Array.Copy(data_, srcIndex, dest.data_, destIndex, BlockSize);
-                }
-            }
-        }
-
-        int blockIndex(int blockX, int blockY)
-        {
-            return (blockY * (width_ / BlockLen) + blockX) * BlockSize;
-        }
-
-    }
-
-#if false
-    public class Etc1Data
-    {
-        const int BlockLen = 4;
-        const int BlockSize = 8;
-
-        int width_;
-        int height_;
-        byte[] data_;
-
-        public byte[] Data { get { return data_; } }
-
-        public Etc1Data(int width, int height, byte[] data = null)
-        {
-            width_ = width;
-            height_ = height;
-            if (data != null)
-            {
-                data_ = data;
-            }
-            else
-            {
-                data_ = new byte[width_ * height_ / 2];
-            }
-        }
-
-        public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY )
-        {
-            int srcBX = srcX / BlockLen;
-            int srcBY = srcY / BlockLen;
-            int destBX = destX / BlockLen;
-            int destBY = destY / BlockLen;
-            int blockWidth = width / BlockLen;
-            int blockHeight = height / BlockLen;
-
-            for (int by = 0; by < blockHeight; by++)
-            {
-                for (int bx = 0; bx < blockWidth; bx++)
-                {
-                    var srcIndex = blockIndex(srcBX + bx, srcBY + by);
-                    var destIndex = dest.blockIndex(destBX + bx, destBY + by);
-                    //Debug.LogFormat("copy bx:{3} by:{4} src:{5:X} dest:{6:X} {0:X}=>{1:X}", srcIndex, destIndex, 0, bx, by, data_.Length, dest.data_.Length);
-                    System.Array.Copy(data_, srcIndex, dest.data_, destIndex, BlockSize);
-                }
-            }
-        }
-
-        int blockIndex(int blockX, int blockY)
-        {
-            return (blockY * (width_ / BlockLen) + blockX) * BlockSize;
-        }
-
-    }
-#endif
 }
