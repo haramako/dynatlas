@@ -7,7 +7,7 @@ PVRTOOL='bin/PVRTexToolCLI.exe'
 
 f = "show.png"
 
-if true
+if false
 
   sh "#{PVRTOOL} -f PVRTC1_4 -i #{f} -o fuga.pvr"
   
@@ -26,4 +26,11 @@ pp bin.read(width*height/2).size
 else
   # sh "etcpack.exe"
   sh "bin/etc1tool.exe #{f} -o fuga.pkm"
+
+  bin = File.open('fuga.pkm','r:ascii-8bit')
+
+  pp bin.read(8).unpack('a4a2c2')
+  header = bin.read(8).unpack('n4')
+  pp header
+  ex_width, ex_height, orig_width, orig_width = *header
 end

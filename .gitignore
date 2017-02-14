@@ -1,0 +1,7 @@
+/dynatlas/dynatlas/Library
+/dynatlas/dynatlas/Temp
+*.csproj
+*.sln
+.vs
+/dynatlas.exe
+*.tsp
