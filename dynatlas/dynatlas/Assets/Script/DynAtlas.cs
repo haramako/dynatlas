@@ -7,7 +7,8 @@ public class DynAtlas {
 
     int size_ = 2048;
     Texture2D tex_;
-    Etc1Data data_;
+    //Etc1Data data_;
+    RawTex data_;
 
     Dictionary<string, Sprite> sprites_ = new Dictionary<string,Sprite>();
 
@@ -17,7 +18,7 @@ public class DynAtlas {
     {
         size_ = size;
         tex_ = new Texture2D(size_, size_, TextureFormat.ETC_RGB4, false);
-        data_ = new Etc1Data(size_, size_);
+        data_ = new RawTex(size_, size_);
     }
 
     public Texture2D Texture { get { return tex_; } }
@@ -33,6 +34,34 @@ public class DynAtlas {
         {
             Profiler.BeginSample("load");
             var magic = r.ReadBytes(4);
+            var foramt = r.ReadByte();
+            var width = r.ReadUInt16();
+            var height = r.ReadUInt16();
+            var data = r.ReadBytes(width * height / 2);
+
+            var rawtex = new RawTex(width, height, data);
+            Profiler.EndSample();
+
+            Profiler.BeginSample("copy");
+            rawtex.CopyRect(0, 0, width, height, data_, 0, 0);
+            Profiler.EndSample();
+
+            var sprite = Sprite.Create(tex_, new Rect(0, 0, width, height), new Vector2(width / 2f, height / 2f));
+            sprite.associatedAlphaSplitTexture
+            sprites_[spriteName] = sprite;
+
+            dirty_ = true;
+        }
+
+    }
+
+#if false
+    public void Load2(string spriteName, Stream s)
+    {
+        using (var r = new BinaryReader(s))
+        {
+            Profiler.BeginSample("load");
+            var magic = r.ReadBytes(4);
             var version = r.ReadBytes(2);
             var foramt = r.ReadBytes(2);
             var extendedWidth = ntol(r.ReadUInt16());
@@ -41,7 +70,7 @@ public class DynAtlas {
             var origHeight = ntol(r.ReadUInt16());
             var data = r.ReadBytes(extendedWidth * extendedHeight / 2);
 
-            var rawtex = new Etc1Data(extendedWidth, extendedHeight, data);
+            var rawtex = new RawTex(extendedWidth, extendedHeight, data);
             Profiler.EndSample();
 
             Profiler.BeginSample("copy");
@@ -54,7 +83,7 @@ public class DynAtlas {
         }
 
     }
-
+#endif
     public void ApplyChanges()
     {
         if( dirty_ )
@@ -85,7 +114,7 @@ public class DynAtlas {
     }
 
 
-    public class Etc1Data
+    public class RawTex
     {
         const int BlockLen = 4;
         const int BlockSize = 8;
@@ -96,7 +125,7 @@ public class DynAtlas {
 
         public byte[] Data { get { return data_; } }
 
-        public Etc1Data(int width, int height, byte[] data = null)
+        public RawTex(int width, int height, byte[] data = null)
         {
             width_ = width;
             height_ = height;
@@ -110,7 +139,7 @@ public class DynAtlas {
             }
         }
 
-        public void CopyRect(int srcX, int srcY, int width, int height, Etc1Data dest, int destX, int destY )
+        public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
         {
             int srcBX = srcX / BlockLen;
             int srcBY = srcY / BlockLen;
@@ -138,4 +167,58 @@ public class DynAtlas {
 
     }
 
+#if false
+    public class Etc1Data
+    {
+        const int BlockLen = 4;
+        const int BlockSize = 8;
+
+        int width_;
+        int height_;
+        byte[] data_;
+
+        public byte[] Data { get { return data_; } }
+
+        public Etc1Data(int width, int height, byte[] data = null)
+        {
+            width_ = width;
+            height_ = height;
+            if (data != null)
+            {
+                data_ = data;
+            }
+            else
+            {
+                data_ = new byte[width_ * height_ / 2];
+            }
+        }
+
+        public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY )
+        {
+            int srcBX = srcX / BlockLen;
+            int srcBY = srcY / BlockLen;
+            int destBX = destX / BlockLen;
+            int destBY = destY / BlockLen;
+            int blockWidth = width / BlockLen;
+            int blockHeight = height / BlockLen;
+
+            for (int by = 0; by < blockHeight; by++)
+            {
+                for (int bx = 0; bx < blockWidth; bx++)
+                {
+                    var srcIndex = blockIndex(srcBX + bx, srcBY + by);
+                    var destIndex = dest.blockIndex(destBX + bx, destBY + by);
+                    //Debug.LogFormat("copy bx:{3} by:{4} src:{5:X} dest:{6:X} {0:X}=>{1:X}", srcIndex, destIndex, 0, bx, by, data_.Length, dest.data_.Length);
+                    System.Array.Copy(data_, srcIndex, dest.data_, destIndex, BlockSize);
+                }
+            }
+        }
+
+        int blockIndex(int blockX, int blockY)
+        {
+            return (blockY * (width_ / BlockLen) + blockX) * BlockSize;
+        }
+
+    }
+#endif
 }
