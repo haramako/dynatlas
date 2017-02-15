@@ -3,10 +3,14 @@
 /unity/obj
 *.csproj
 *.sln
+*.userprefs
 .vs
 
-/dynatlas.exe
-/dynatlas
-*.tsp
+/bin/png2tsp
+/bin/png2tsp.exe
+/png2tsp/png2tsp
+/png2tsp/png2tsp.exe
 
-sample_tsp
+*.tsp
+/sample_tsp
+/sample2_tsp

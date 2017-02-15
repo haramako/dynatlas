@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System;
 
@@ -22,33 +24,40 @@ public class TestScene : MonoBehaviour {
 		yield return null;
 		//yield return new WaitForSeconds (1.0f);
 
-        atlas = new DynAtlas(2048);
+        atlas = new DynAtlas(4096);
 
-		string file;
-		/*
-		for (int i = 0; i < 30; i++) {
-			if (Random.Range (0, 2) == 0) {
-				file = Path.Combine (Application.dataPath, slash ("../../fuga.tsp"));
-				atlas.Load (file);
-			} else {
-				file = Path.Combine (Application.dataPath, slash ("../../piyo.pkm"));
-				atlas.Load (file);
-			}
-		}*/
-		var dir = Path.Combine (Application.dataPath, slash ("../../sample_tsp"));
+		IEnumerable<string> dirs = new string[0];
+		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample_tsp"))));
+		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2_tsp"))));
+
+		int ii=0;
 		try {
-		foreach (var f in Directory.GetFiles(dir) ){
-			Debug.Log(f);
-			atlas.Load (f);
-		}
+			foreach (var f in dirs ){
+				if( f.EndsWith(".pvr.tsp") ){
+					//Debug.Log(f);
+					atlas.Load (f);
+					ii++;
+				}
+			}
 		}catch(Exception ex){
+			Debug.LogException(ex);
+			Debug.Log(ii);
 		}
 
         atlas.ApplyChanges();
 
         Image.texture = atlas.Texture;
-		Img2.sprite = atlas.FindSprite("fuga");
+		Img2.sprite = atlas.FindSprite("fuga.pvr");
         Img3.sprite = atlas.FindSprite("piyo");
+
+		while (true) {
+			foreach (var sp in atlas.GetSprites()) {
+				Img3.sprite = sp;
+				Img3.SetNativeSize ();
+				yield return new WaitForSeconds (0.2f);
+			}
+		}
+
 	}
 	
 	// Update is called once per frame

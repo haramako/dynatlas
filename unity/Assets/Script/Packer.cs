@@ -4,7 +4,7 @@ using UnityEngine;
 
 public partial class DynAtlas {
 	
-	public class Packer {
+	public class Packer : IPacker {
 		int width_;
 		int height_;
 
@@ -17,12 +17,14 @@ public partial class DynAtlas {
 		{
 			width_ = width;
 			height_ = height;
+			lowY = 4;
+			highX = 4;
 		}
 
 		public Vector2 Add(int w, int h)
 		{
 			if (highX + w > width_) {
-				highX = 0;
+				highX = 4;
 				lowY = highY;
 			}
 

@@ -8,6 +8,16 @@ using UnityEngine.Profiling;
 #endif
 
 public partial class DynAtlas {
+	
+	public enum FileType
+	{
+		TSP,
+		PKM,
+	}
+
+	public interface IPacker {
+		Vector2 Add(int w, int h);
+	}
 
     int size_ = 2048;
     Texture2D tex_;
@@ -17,20 +27,27 @@ public partial class DynAtlas {
     Dictionary<string, Sprite> sprites_ = new Dictionary<string,Sprite>();
 
     bool dirty_;
-	Packer packer_;
+	IPacker packer_;
 
 	static public TextureFormat DefaultTextureFormat()
 	{
-		return TextureFormat.ETC_RGB4;
+		return TextureFormat.PVRTC_RGBA4;
+		//return TextureFormat.ETC_RGB4;
 	}
 		
 
-    public DynAtlas(int size)
+    public DynAtlas(int size, IPacker packer = null)
     {
         size_ = size;
-        tex_ = new Texture2D(size_, size_, TextureFormat.ETC_RGB4, false);
+		tex_ = new Texture2D(size_, size_, DefaultTextureFormat(), false);
+		tex_.wrapMode = TextureWrapMode.Clamp;
 		data_ = new RawTex(DefaultTextureFormat(), size_, size_);
-		packer_ = new Packer (size_, size_);
+		//packer_ = new Packer (size_, size_);
+		if (packer == null) {
+			packer_ = new MaxRectsPacker (size_, size_);
+		} else {
+			packer_ = packer;
+		}
     }
 
     public Texture2D Texture { get { return tex_; } }
@@ -39,12 +56,6 @@ public partial class DynAtlas {
     {
         return (ushort)((n << 8) | (n >> 8));
     }
-
-	public enum FileType
-	{
-		TSP,
-		PKM,
-	}
 
 	public void Load(string filename, string spriteName = null ){
 		if( spriteName == null ){
@@ -106,6 +117,10 @@ public partial class DynAtlas {
 		{
 			return null;
 		}
+	}
+
+	public IEnumerable<Sprite> GetSprites(){
+		return sprites_.Values;
 	}
 
 }

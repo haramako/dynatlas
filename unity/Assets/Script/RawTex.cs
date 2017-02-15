@@ -12,6 +12,7 @@ public partial class DynAtlas {
 		}
 
 		public enum TSPTextureFormat {
+			PVRTC_RGBA4 = 1,
 			ETC = 2
 		}
 
@@ -38,7 +39,47 @@ public partial class DynAtlas {
 			}
 		}
 
-		public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
+		public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY){
+			if (Format == TextureFormat.PVRTC_RGBA4) {
+				CopyRectToPVR (srcX, srcY, width, height, dest, destX, destY);
+			} else {
+				CopyRectToETC (srcX, srcY, width, height, dest, destX, destY);
+			}
+		}
+
+		public void CopyRectToPVR(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
+		{
+			int srcBX = srcX / BlockLen;
+			int srcBY = srcY / BlockLen;
+			int destBX = destX / BlockLen;
+			int destBY = destY / BlockLen;
+			int blockWidth = width / BlockLen;
+			int blockHeight = height / BlockLen;
+			int bitSize = Mathf.FloorToInt (Mathf.Log (2048, 2));
+
+			for (int by = 0; by < blockHeight; by++)
+			{
+				for (int bx = 0; bx < blockWidth; bx++)
+				{
+					var srcIndex = blockIndex(srcBX + bx, srcBY + by);
+					var destIndex = dest.blockIndexPVR(bitSize, destBX + bx, destBY + by) * BlockSize;
+					System.Array.Copy(Data, srcIndex, dest.Data, destIndex, BlockSize);
+				}
+			}
+		}
+
+		int blockIndexPVR(int bitSize, int bx, int by)
+		{
+			var r = 0;
+			for( var i = 0; i < bitSize; i++ ){
+				r |= (((bx & 1) << 1) | (by & 1)) << (i*2);
+				bx = bx >> 1;
+				by = by >> 1;
+			}
+			return r;
+		}
+
+		public void CopyRectToETC(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
 		{
 			int srcBX = srcX / BlockLen;
 			int srcBY = srcY / BlockLen;
@@ -132,6 +173,9 @@ public partial class DynAtlas {
 				switch( tspFormat ){
 				case TSPTextureFormat.ETC:
 					format = TextureFormat.ETC_RGB4;
+					break;
+				case TSPTextureFormat.PVRTC_RGBA4:
+					format = TextureFormat.PVRTC_RGBA4;
 					break;
 				default:
 					throw new Exception ("invalid TSP format " + tspFormat);
