@@ -1,7 +1,12 @@
-/dynatlas/dynatlas/Library
-/dynatlas/dynatlas/Temp
+/unity/Library
+/unity/Temp
+/unity/obj
 *.csproj
 *.sln
 .vs
+
 /dynatlas.exe
+/dynatlas
 *.tsp
+
+sample_tsp

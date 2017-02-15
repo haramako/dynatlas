@@ -1,21 +1,17 @@
 package main
 
 import (
-	"math"
-	"image"
-	//"image/color"
-	"github.com/fogleman/gg"
-	//"image/png"
-	"encoding/binary"
 	"flag"
 	"fmt"
-	"path/filepath"
-	"time"
-	"io"
-	//"io/ioutil"
+	"image"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"time"
+
+	"github.com/fogleman/gg"
 )
 
 //go:generate stringer -type=FormatType
@@ -26,9 +22,6 @@ const (
 	PVRTC
 	ETC1
 )
-
-const PvrtoolPath = "bin\\PVRTexToolCLI.exe"
-const EtctoolPath = "bin\\etc1tool.exe"
 
 var tempDir string
 
@@ -41,6 +34,7 @@ func check(err error) {
 }
 
 var count = 0
+
 func tempPath(file string) string {
 	count++
 	return filepath.Join(tempDir, fmt.Sprintf("%d%s", count, file))
@@ -66,10 +60,10 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	
+
 	rand.Seed(time.Now().UTC().UnixNano())
 	tempDir = filepath.Join(os.TempDir(), "png2tsp")
-	os.MkdirAll(tempDir,0666)
+	os.MkdirAll(tempDir, 0777)
 
 	format = ETC1
 	args := flag.Args()
@@ -88,7 +82,6 @@ func convert(format FormatType, in, out string) {
 	bounds := img.Bounds()
 	pot_x := upPot(bounds.Size().X)
 	pot_y := upPot(bounds.Size().Y)
-	fmt.Println(pot_x, pot_y)
 
 	pot_img := gg.NewContext(pot_x, pot_y)
 	pot_img.DrawImage(img, 0, 0)
@@ -97,10 +90,10 @@ func convert(format FormatType, in, out string) {
 	img = flipY(img)
 
 	tex := image2tex(format, img)
-		
-	w, err := os.OpenFile(out, os.O_CREATE, 0666)
+
+	w, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY, 0666)
 	check(err)
-	
+
 	tex.Write(w)
 }
 
@@ -110,12 +103,12 @@ func flipY(img_ image.Image) image.Image {
 	bounds := img.Bounds()
 	w := bounds.Size().X
 	h := bounds.Size().Y
-	var x,y int
-	for y = 0; y<h/2; y++ {
-		for x = 0; x<w; x++ {
-			col := img.At(x,y)
-			img.Set(x,y, img.At(x,h-y))
-			img.Set(x,h-y, col)
+	var x, y int
+	for y = 0; y < h/2; y++ {
+		for x = 0; x < w; x++ {
+			col := img.At(x, y)
+			img.Set(x, y, img.At(x, h-y))
+			img.Set(x, h-y, col)
 		}
 	}
 	return img
@@ -150,73 +143,14 @@ func png2etc1(file string) *PackedTexture {
 	tmp_pkm := tempPath(".pkm")
 
 	output, err := exec.Command(EtctoolPath, file, "-o", tmp_pkm).Output()
-	fmt.Println(string(output))
+	if err != nil {
+		fmt.Println(string(output))
+	}
 	check(err)
 
 	pkm, err := os.Open(tmp_pkm)
 	check(err)
-	
+
 	tex := LoadPKM(pkm)
 	return tex
-}
-
-type TSPHeader struct {
-	Magic [4]byte
-	FormatType byte
-	Width int16
-	Height int16
-}
-
-type PackedTexture struct {
-	Format FormatType
-	Width int
-	Height int
-	Data []byte
-}
-
-type PKMHeader struct {
-	Magic [4]byte
-	Version [2]byte
-	Type [2]byte
-	Width int16
-	Height int16
-	OrigWidth int16
-	OrigHeight int16
-}
-
-func LoadPKM(r io.Reader) *PackedTexture {
-	header := PKMHeader{}
-	
-	err := binary.Read(r, binary.BigEndian, &header)
-	check(err)
-
-	size := int(header.Width) * int(header.Height) / 2
-	buf := make([]byte, size)
-	n, err := r.Read(buf)
-	check(err)
-	if n != len(buf) {
-		panic("invalid size")
-	}
-	
-	// fmt.Printf("%v %v %v %v\n", header.Magic, header.Width, header.Height, len(buf))
-
-	return &PackedTexture{
-		Format: ETC1,
-		Width: int(header.Width),
-		Height: int(header.Height),
-		Data: buf,
-	}
-}
-
-func (t *PackedTexture) Write(w io.Writer){
-	header := TSPHeader {
-		Magic: [4]byte{'T', 'S', 'P', ' '},
-		FormatType: byte(t.Format),
-		Width: int16(t.Width),
-		Height: int16(t.Height),
-	}
-	err := binary.Write(w, binary.LittleEndian, &header)
-	check(err)
-
-	w.Write(t.Data)
 }
