@@ -1,8 +1,10 @@
 # coding: utf-8
 if RUBY_PLATFORM =~ /darwin/
+  EXE_EXT = ''
   EXE = './bin/png2tsp'
 else
-  EXE = 'bin/png2tsp.exe'
+  EXE_EXT = '.exe'
+  EXE = './bin/png2tsp.exe'
 end
 
 file EXE => Dir.glob('png2tsp/*.go') do
@@ -10,7 +12,7 @@ file EXE => Dir.glob('png2tsp/*.go') do
     # sh "go generate"
     sh "go build"
   end
-  cp 'png2tsp/png2tsp', EXE
+  cp 'png2tsp/png2tsp'+EXE_EXT, EXE
 end
 
 desc '実行ファイルを作成する'
