@@ -21,47 +21,65 @@ public class TestScene : MonoBehaviour {
     // Use this for initialization
     IEnumerator Start () {
 
+		Debug.Log (SystemInfo.copyTextureSupport);
+
 		yield return null;
 		//yield return new WaitForSeconds (1.0f);
 
-        atlas = new DynAtlas(4096);
+		atlas = new DynAtlas(1024);
+		atlas.ReserveTex (TextureFormat.ARGB32);
+
+		yield return new WaitForSeconds (0.5f);
 
 		IEnumerable<string> dirs = new string[0];
-		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample_tsp"))));
-		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2_tsp"))));
+		//dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample_tsp"))));
+		//dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2_tsp"))));
+		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2"))));
 
 		int ii=0;
-		try {
+		// {
 			foreach (var f in dirs ){
-				if( f.EndsWith(".pvr.tsp") ){
-					//Debug.Log(f);
+				if( f.EndsWith(".png" /*".tsp" */ /*".pvr.tsp"*/) ){
+					Debug.Log(f);
 					atlas.Load (f);
+					yield return new WaitForSeconds (0.2f);
 					ii++;
+					if( ii > 3 ) break;
 				}
 			}
-		}catch(Exception ex){
-			Debug.LogException(ex);
-			Debug.Log(ii);
-		}
+		//}catch(Exception ex){
+		//	Debug.LogException(ex);
+		//	Debug.Log(ii);
+		//}
 
         atlas.ApplyChanges();
 
-        Image.texture = atlas.Texture;
-		Img2.sprite = atlas.FindSprite("fuga.pvr");
-        Img3.sprite = atlas.FindSprite("piyo");
+		atlasList = atlas.GetAtlases ().Values.SelectMany (i => i).ToList ();
+		OnImageClick ();
+
+		Image.texture = DynAtlas.RawTex.LastLoaded;
 
 		while (true) {
-			foreach (var sp in atlas.GetSprites()) {
-				Img3.sprite = sp;
+			foreach (var sp in atlas.GetDynSprites()) {
+				Img3.sprite = sp.Sprite;
 				Img3.SetNativeSize ();
 				yield return new WaitForSeconds (0.2f);
 			}
+			yield return new WaitForSeconds (0.2f);
 		}
 
 	}
-	
-	// Update is called once per frame
-	void Update () {
-	
+
+	List<DynAtlas.Atlas> atlasList;
+	int i=0;
+
+	public void OnImageClick(){
+		Image.texture = atlasList [i].Texture;
+		i++;
+		if (i >= atlasList.Count) {
+			i = 0;
+		}
 	}
+	
+
 }

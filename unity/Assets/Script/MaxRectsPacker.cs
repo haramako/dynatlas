@@ -16,7 +16,7 @@ public partial class DynAtlas {
 		{
 			var rect = pack_.Insert (w+4, h+4, MaxRectsBinPack.FreeRectChoiceHeuristic.RectBestLongSideFit);
 			if (rect.width == 0 || rect.height == 0) {
-				throw new Exception ("cannot pack");
+				return new Vector2 (-1, -1);
 			}
 			return rect.min;
 		}

@@ -8,110 +8,121 @@ using UnityEngine.Profiling;
 #endif
 
 public partial class DynAtlas {
-	
 	public enum FileType
 	{
 		TSP,
 		PKM,
+		PNG,
 	}
 
 	public interface IPacker {
 		Vector2 Add(int w, int h);
 	}
 
-    int size_ = 2048;
-    Texture2D tex_;
-    //Etc1Data data_;
-    RawTex data_;
-
-    Dictionary<string, Sprite> sprites_ = new Dictionary<string,Sprite>();
-
-    bool dirty_;
-	IPacker packer_;
-
-	static public TextureFormat DefaultTextureFormat()
-	{
-		return TextureFormat.PVRTC_RGBA4;
-		//return TextureFormat.ETC_RGB4;
+	public class DynSprite {
+		public Atlas Atlas;
+		public Sprite Sprite;
 	}
-		
 
-    public DynAtlas(int size, IPacker packer = null)
-    {
-        size_ = size;
-		tex_ = new Texture2D(size_, size_, DefaultTextureFormat(), false);
-		tex_.wrapMode = TextureWrapMode.Clamp;
-		data_ = new RawTex(DefaultTextureFormat(), size_, size_);
-		//packer_ = new Packer (size_, size_);
-		if (packer == null) {
-			packer_ = new MaxRectsPacker (size_, size_);
-		} else {
-			packer_ = packer;
+	public int MaxSize { get; private set; }
+
+	Dictionary<TextureFormat,List<Atlas>> atlases_ = new Dictionary<TextureFormat,List<Atlas>>();
+	Dictionary<string, DynSprite> sprites_ = new Dictionary<string,DynSprite>();
+
+	public DynAtlas(int maxSize = 0){
+		MaxSize = maxSize;
+	}
+
+	public void ApplyChanges()
+	{
+		foreach (var list in atlases_.Values) {
+			foreach (var atlas in list) {
+				atlas.ApplyChanges ();
+			}
 		}
-    }
+	}
 
-    public Texture2D Texture { get { return tex_; } }
-
-    static ushort ntol(ushort n)
-    {
-        return (ushort)((n << 8) | (n >> 8));
-    }
-
-	public void Load(string filename, string spriteName = null ){
+	public Sprite Load(string filename, string spriteName = null ){
 		if( spriteName == null ){
 			spriteName = Path.GetFileNameWithoutExtension (filename);
 		}
 		using( var stream = File.OpenRead(filename) ){
-			Load (spriteName, RawTex.FileTypeOfFilename(filename), stream);
+			return Load (spriteName, RawTex.FileTypeOfFilename(filename), stream);
 		}
 	}
 
-    public void Load(string spriteName, FileType fileType, Stream s)
-    {
-        Profiler.BeginSample("load");
+	public List<Atlas> GetAtlasesByFormat(TextureFormat format){
+		List<Atlas> list;
+		if (atlases_.TryGetValue (format, out list)) {
+			return list;
+		} else {
+			list = new List<Atlas> ();
+			atlases_ [format] = list;
+			return list;
+		}
+	}
+
+	public Sprite Load(string spriteName, FileType fileType, Stream s)
+	{
+		DynSprite result;
+
+		Profiler.BeginSample("load");
 		RawTex rawtex = RawTex.Load(fileType, s);
-        Profiler.EndSample();
+		Profiler.EndSample();
 
-		var pos = packer_.Add (rawtex.Width, rawtex.Height);
+		var list = GetAtlasesByFormat (rawtex.Format);
+		foreach (var atlas in list ) {
+			result = addToAtlas (atlas, spriteName, rawtex);
+			if (result != null ) {
+				return result.Sprite;
+			}
+		}
 
-        Profiler.BeginSample("copy");
-		rawtex.CopyRect(0, 0, rawtex.Width, rawtex.Height, data_, (int)pos.x, (int)pos.y);
-        Profiler.EndSample();
+		// 見つからなかった
+		var newAtlas = new Atlas(rawtex.Format, MaxSize, new MaxRectsPacker(MaxSize, MaxSize));
+		result = addToAtlas(newAtlas, spriteName, rawtex);
+
+		list.Add (newAtlas);
+
+		return result.Sprite;
+	}
+
+	DynSprite addToAtlas(Atlas atlas, string spriteName, RawTex rawtex){
+		
+		var pos = atlas.Add (rawtex);
+		if (pos.x < 0) {
+			return null;
+		}
 
 		var sprite = Sprite.Create(
-			tex_, 
+			atlas.Texture, 
 			new Rect(pos.x, pos.y, rawtex.Width, rawtex.Height), 
 			new Vector2(rawtex.Width / 2f, rawtex.Height / 2f), 
 			100f, 0, SpriteMeshType.FullRect);
-		
-        sprites_[spriteName] = sprite;
 
-        dirty_ = true;
+		var dynSprite = new DynSprite {
+			Atlas = atlas,
+			Sprite = sprite,
+		};
 
-    }
+		sprites_ [spriteName] = dynSprite;
 
-    public void ApplyChanges()
-    {
-        if( dirty_ )
-        {
-            dirty_ = false;
+		return dynSprite;
+	}
 
-            Profiler.BeginSample("load tex");
-            tex_.LoadRawTextureData(data_.Data);
-            Profiler.EndSample();
+	public void ReserveTex(TextureFormat format){
+		var list = GetAtlasesByFormat (format);
+		var newAtlas = new Atlas(format, MaxSize, new MaxRectsPacker(MaxSize, MaxSize));
+		list.Add (newAtlas);
+	}
 
-            Profiler.BeginSample("apply");
-            tex_.Apply();
-            Profiler.EndSample();
-        }
-    }
 
 	public Sprite FindSprite(string name)
 	{
-		Sprite found;
+		DynSprite found;
 		if( sprites_.TryGetValue(name, out found))
 		{
-			return found;
+			return found.Sprite;
 		}
 		else
 		{
@@ -119,8 +130,17 @@ public partial class DynAtlas {
 		}
 	}
 
-	public IEnumerable<Sprite> GetSprites(){
+	public Dictionary<TextureFormat,List<Atlas>> GetAtlases(){
+		return atlases_;
+	}
+
+	public IEnumerable<DynSprite> GetDynSprites(){
 		return sprites_.Values;
+	}
+
+
+	static bool IsRGBFormat(TextureFormat format){
+		return (format == TextureFormat.RGBA32 || format == TextureFormat.ARGB32 || format == TextureFormat.RGB24);
 	}
 
 }

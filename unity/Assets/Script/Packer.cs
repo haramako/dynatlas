@@ -29,7 +29,7 @@ public partial class DynAtlas {
 			}
 
 			if (lowY + h > height_) {
-				throw new Exception ("can't insert");
+				return new Vector2 (-1, -1);
 			}
 
 			var result = new Vector2 (highX, lowY);

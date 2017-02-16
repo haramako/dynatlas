@@ -23,27 +23,44 @@ public partial class DynAtlas {
 		public int Width{ get; private set; }
 		public int Height{ get; private set; }
 		public byte[] Data { get ; private set; }
+		public Texture Texture{ get; private set; }
+		public bool IsRGB { get { return IsRGBFormat (Format); } }
+
+		public RawTex(Texture2D tex){
+			Format = tex.format;
+			Texture = tex;
+			Width = tex.width;
+			Height = tex.height;
+		}
 
 		public RawTex(TextureFormat format, int width, int height, byte[] data = null)
 		{
 			Format = format;
 			Width = width;
 			Height = height;
-			if (data != null)
-			{
-				Data = data;
-			}
-			else
-			{
-				Data = new byte[Width * Height / 2];
+			if( IsRGBFormat(format) ){
+				Texture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+			}else{
+				if (data != null)
+				{
+					Data = data;
+				}
+				else
+				{
+					Data = new byte[Width * Height / 2];
+				}
 			}
 		}
 
 		public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY){
 			if (Format == TextureFormat.PVRTC_RGBA4) {
 				CopyRectToPVR (srcX, srcY, width, height, dest, destX, destY);
-			} else {
+			} else if (Format == TextureFormat.ETC_RGB4) {
 				CopyRectToETC (srcX, srcY, width, height, dest, destX, destY);
+			} else if (IsRGB) {
+				CopyRectToRGBA (srcX, srcY, width, height, dest, destX, destY);
+			} else {
+				throw new Exception ("unknown texture format");
 			}
 		}
 
@@ -104,6 +121,15 @@ public partial class DynAtlas {
 			return (blockY * (Width / BlockLen) + blockX) * BlockSize;
 		}
 
+		public void CopyRectToRGBA(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY)
+		{
+			Debug.LogFormat ("{0} {1} {2} {3} {4} {5}", srcX, srcY, width, height, destX, destY);
+			var rt = (RenderTexture)dest.Texture;
+			Debug.Log (rt.IsCreated());
+			Graphics.SetRenderTarget ((RenderTexture)dest.Texture);
+			Graphics.CopyTexture (Texture, 0, 0, srcX, srcY, width, height, dest.Texture, 0, 0, destX, destY);
+		}
+
 		public static FileType FileTypeOfFilename(string filename){
 			var extname = Path.GetExtension (filename);
 			switch (extname.ToLowerInvariant ()) {
@@ -111,9 +137,16 @@ public partial class DynAtlas {
 				return FileType.TSP;
 			case ".pkm":
 				return FileType.PKM;
+			case ".png":
+				return FileType.PNG;
 			default:
 				throw new Exception ("unkonwn file extension " + filename);
 			}
+		}
+
+		static ushort ntol(ushort n)
+		{
+			return (ushort)((n << 8) | (n >> 8));
 		}
 
 		public static RawTex Load(FileType fileType, Stream s){
@@ -122,6 +155,8 @@ public partial class DynAtlas {
 				return RawTex.LoadTSP (s);
 			case FileType.PKM:
 				return RawTex.LoadPKM (s);
+			case FileType.PNG:
+				return RawTex.LoadPNG (s);
 			default:
 				throw new Exception ("invalid file type");
 			}
@@ -189,7 +224,34 @@ public partial class DynAtlas {
 			}
 		}
 
+		// PNGファイルを読み込む
+		public static RawTex LoadPNG(Stream s) 
+		{
+			using (var r = new BinaryReader (s)) {
+				byte[] data = r.ReadBytes ((int)r.BaseStream.Length);
 
+				int pos = 16; // 16バイトから開始
+
+				int width = 0;
+				for (int i = 0; i < 4; i++) {
+					width = width * 256 + data [pos++];
+				}
+
+				int height = 0;
+				for (int i = 0; i < 4; i++) {
+					height = height * 256 + data [pos++];
+				}
+
+				Texture2D tex = new Texture2D (width, height, TextureFormat.ARGB32, false, true);
+				tex.LoadImage (data);
+
+				LastLoaded = tex;
+
+				return new RawTex (tex);
+			}
+		}
+
+		public static Texture2D LastLoaded;
 	}
 
 }
