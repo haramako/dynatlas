@@ -22,20 +22,22 @@ task :test => :build do
   sh( EXE, '-h' ) rescue nil
   sh EXE, 'fuga.png', 'fuga.tsp'
   sh EXE, '-f', 'PVRTC', 'fuga.png', 'fuga.pvr.tsp'
+
+  mkdir_p 'outdirtest'
+  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=-etc.tsp', '-f=ETC1', 'fuga.png', 'fugahalf.png'
+  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=-pvr.tsp', '-f=PVRTC', 'fuga.png', 'fugahalf.png'
 end
 
 task :sample => :build do
   mkdir_p 'sample_tsp'
-  Dir.glob('sample/*.png') do |f|
-    sh EXE, f, 'sample_tsp/' + File.basename(f) + ".etc.tsp"
-    sh EXE, '-f', 'pvrtc', f, 'sample_tsp/' + File.basename(f) + ".pvr.tsp"
-  end
+  files = Dir.glob('sample/*.png')
+  sh EXE, '-batch', '-f=ETC1', '-outdir=sample_tsp', '-postfix=.etc.tsp', *files
+  sh EXE, '-batch', '-f=PVRTC', '-outdir=sample_tsp', '-postfix=.pvr.tsp', *files
 end
 
 task :sample2 => :build do
   mkdir_p 'sample2_tsp'
-  Dir.glob('sample2/*.png') do |f|
-    sh EXE, f, 'sample2_tsp/' + File.basename(f) + ".etc.tsp"
-    sh EXE, '-f', 'PVRTC', f, 'sample2_tsp/' + File.basename(f) + ".pvr.tsp"
-  end
+  files = Dir.glob('sample2/*.png')
+  sh EXE, '-batch', '-f=ETC1', '-outdir=sample2_tsp', '-postfix=.etc.tsp', *files
+  sh EXE, '-batch', '-f=PVRTC', '-outdir=sample2_tsp', '-postfix=.pvr.tsp', *files
 end

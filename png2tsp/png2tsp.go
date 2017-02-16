@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fogleman/gg"
@@ -30,8 +31,12 @@ var EtctoolPath string
 
 var tempDir string
 
-var optFormat = flag.String("f", "etc1", "output texture format, PVRTC or ETC1, default is ETC1")
-var optDither = flag.Bool("dither", false, "add dihter to avoid compress artifact, enable only '-f PVRTC'")
+var optFormat = flag.String("f", "etc1", "Output texture format, PVRTC or ETC1, default is ETC1")
+var optDither = flag.Bool("dither", false, "Add dihter to avoid compress artifact, enable only '-f PVRTC'")
+var optBatch = flag.Bool("batch", false, "Run as batch mode")
+var optPostfix = flag.String("postfix", ".tsp", "Run as batch mode. (Default '.tsp')")
+var optOutDir = flag.String("outdir", "", "Output directory")
+var optJobs = flag.Int("j", 4, "Parallel job number, enable only batch mode.")
 
 func check(err error) {
 	if err != nil {
@@ -60,15 +65,28 @@ func main() {
 		panic(fmt.Sprintf("unknown format %v", *optFormat))
 	}
 
-	if flag.NArg() != 2 {
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
 	initialize()
 
-	args := flag.Args()
-	convert(format, args[0], args[1])
+	if *optBatch {
+		// バッチモード
+		if flag.NArg() <= 0 {
+			flag.PrintDefaults()
+			os.Exit(1)
+		}
+
+		doBatch(format, flag.Args())
+		
+	}else{
+		// １ファイル変換モード
+		
+		if flag.NArg() != 2 {
+			flag.PrintDefaults()
+			os.Exit(1)
+		}
+
+		args := flag.Args()
+		convert(format, args[0], args[1])
+	}
 }
 
 // 初期化を行う
@@ -91,6 +109,41 @@ func initialize() {
 	tempDir = filepath.Join(os.TempDir(), "png2tsp")
 	err = os.MkdirAll(tempDir, 0777)
 	check(err)
+}
+
+// バッチモードで起動する
+func doBatch(format FormatType, files []string){
+	wg := sync.WaitGroup{}
+
+	ch := make(chan string)
+
+	for i := 0; i < *optJobs; i++ {
+		wg.Add(1)
+		go func(){
+			for infile := range ch {
+				ext := filepath.Ext(infile)
+				basename := filepath.Base(infile)
+				basename = basename[0:len(basename)-len(ext)]
+				dir := filepath.Dir(infile)
+				if *optOutDir != "" {
+					dir = *optOutDir
+				}
+				outfile := filepath.Join(dir, basename + *optPostfix)
+				fmt.Printf("converting %v ...\n", outfile)
+
+				convert(format, infile, outfile)
+			}
+			wg.Done()
+		}()
+	}
+	
+	for _, file := range files {
+		ch <- file
+	}
+
+	close(ch)
+
+	wg.Wait()
 }
 
 // テンポラリファイルのパスを取得する
