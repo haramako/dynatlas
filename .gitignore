@@ -11,6 +11,8 @@
 /png2tsp/png2tsp
 /png2tsp/png2tsp.exe
 
+
 *.tsp
 /sample_tsp
 /sample2_tsp
+/outdirtest

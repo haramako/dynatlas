@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
+	"image/png"
 	"math"
 	"math/rand"
 	"os"
@@ -13,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fogleman/gg"
 	"github.com/kardianos/osext"
 )
 
@@ -75,10 +76,10 @@ func main() {
 		}
 
 		doBatch(format, flag.Args())
-		
-	}else{
+
+	} else {
 		// １ファイル変換モード
-		
+
 		if flag.NArg() != 2 {
 			flag.PrintDefaults()
 			os.Exit(1)
@@ -112,23 +113,23 @@ func initialize() {
 }
 
 // バッチモードで起動する
-func doBatch(format FormatType, files []string){
+func doBatch(format FormatType, files []string) {
 	wg := sync.WaitGroup{}
 
 	ch := make(chan string)
 
 	for i := 0; i < *optJobs; i++ {
 		wg.Add(1)
-		go func(){
+		go func() {
 			for infile := range ch {
 				ext := filepath.Ext(infile)
 				basename := filepath.Base(infile)
-				basename = basename[0:len(basename)-len(ext)]
+				basename = basename[0 : len(basename)-len(ext)]
 				dir := filepath.Dir(infile)
 				if *optOutDir != "" {
 					dir = *optOutDir
 				}
-				outfile := filepath.Join(dir, basename + *optPostfix)
+				outfile := filepath.Join(dir, basename+*optPostfix)
 				fmt.Printf("converting %v ...\n", outfile)
 
 				convert(format, infile, outfile)
@@ -136,7 +137,7 @@ func doBatch(format FormatType, files []string){
 			wg.Done()
 		}()
 	}
-	
+
 	for _, file := range files {
 		ch <- file
 	}
@@ -165,7 +166,10 @@ func floorToPowerOf2(n int) int {
 // ファイルをTSPにコンバートする
 func convert(format FormatType, in, out string) {
 
-	img, err := gg.LoadPNG(in)
+	inReader, err := os.Open(in)
+	check(err)
+
+	img, err := png.Decode(inReader)
 	check(err)
 
 	size := img.Bounds().Size()
@@ -177,9 +181,9 @@ func convert(format FormatType, in, out string) {
 		pot_y = pot_x
 	}
 
-	pot_img := gg.NewContext(pot_x, pot_y)
-	pot_img.DrawImage(img, 0, pot_y-size.Y)
-	img = pot_img.Image()
+	pot_img := image.NewRGBA(image.Rect(0, 0, pot_x, pot_y))
+	draw.Draw(pot_img, image.Rect(0, pot_y-size.Y, size.X, pot_y), img, image.Point{0, 0}, draw.Src)
+	img = pot_img
 
 	img = flipY(img)
 
@@ -220,7 +224,10 @@ func flipY(img_ image.Image) image.Image {
 // PVRTCならWidth,Heightともに同じサイズまで拡張される。
 func imageToPackedTexture(format FormatType, img image.Image) *PackedTexture {
 	tmp_png := tempPath("image2tex.png")
-	err := gg.SavePNG(tmp_png, img)
+	writer, err := os.OpenFile(tmp_png, os.O_CREATE|os.O_WRONLY, 0666)
+	check(err)
+
+	err = png.Encode(writer, img)
 	check(err)
 
 	return pngToPackedTexture(format, tmp_png)
