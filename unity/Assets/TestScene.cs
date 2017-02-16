@@ -27,30 +27,33 @@ public class TestScene : MonoBehaviour {
 		//yield return new WaitForSeconds (1.0f);
 
 		atlas = new DynAtlas(1024);
-		atlas.ReserveTex (TextureFormat.ARGB32);
+		//atlas.ReserveTex (TextureFormat.ARGB32);
 
 		yield return new WaitForSeconds (0.5f);
 
-		IEnumerable<string> dirs = new string[0];
-		//dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample_tsp"))));
-		//dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2_tsp"))));
-		dirs = dirs.Concat( Directory.GetFiles(Path.Combine (Application.dataPath, slash ("../../sample2"))));
-
+		var dirs = new string[]{
+			//"../../sample_tsp",
+			"../../outdirtest",
+			//"../../sample2_tsp",
+			//"../../sample2"
+		};
 		int ii=0;
-		// {
-			foreach (var f in dirs ){
-				if( f.EndsWith(".png" /*".tsp" */ /*".pvr.tsp"*/) ){
-					Debug.Log(f);
-					atlas.Load (f);
-					yield return new WaitForSeconds (0.2f);
-					ii++;
-					if( ii > 3 ) break;
+		try {
+			foreach( var dir in dirs ){
+				var files = Directory.GetFiles(Path.Combine (Application.dataPath, slash (dir)));
+				foreach (var f in files ){
+					if( f.EndsWith("-pvr.tsp") ){
+						Debug.Log(f);
+						atlas.Load (f);
+						ii++;
+						//if( ii > 3 ) break;
+					}
 				}
 			}
-		//}catch(Exception ex){
-		//	Debug.LogException(ex);
-		//	Debug.Log(ii);
-		//}
+		}catch(Exception ex){
+			Debug.LogException(ex);
+			Debug.Log(ii);
+		}
 
         atlas.ApplyChanges();
 

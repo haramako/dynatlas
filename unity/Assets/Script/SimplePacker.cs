@@ -4,7 +4,7 @@ using UnityEngine;
 
 public partial class DynAtlas {
 	
-	public class Packer : IPacker {
+	public class SimplePacker : IPacker {
 		int width_;
 		int height_;
 
@@ -13,7 +13,7 @@ public partial class DynAtlas {
 		int highX;
 		int highY;
 
-		public Packer(int width, int height)
+		public SimplePacker(int width, int height)
 		{
 			width_ = width;
 			height_ = height;
