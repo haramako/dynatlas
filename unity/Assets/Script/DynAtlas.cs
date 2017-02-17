@@ -79,7 +79,7 @@ public partial class DynAtlas {
 		}
 
 		// 見つからなかった
-		var newAtlas = new Atlas(rawtex.Format, MaxSize, new MaxRectsPacker(MaxSize, MaxSize));
+		var newAtlas = new Atlas(rawtex.Format, MaxSize, new MaxRectsPacker(MaxSize, MaxSize/2));
 		result = addToAtlas(newAtlas, spriteName, rawtex);
 
 		list.Add (newAtlas);
@@ -87,17 +87,23 @@ public partial class DynAtlas {
 		return result.Sprite;
 	}
 
-	DynSprite addToAtlas(Atlas atlas, string spriteName, RawTex rawtex){
-		
+	DynSprite addToAtlas(Atlas atlas, string spriteName, RawTex rawtex)
+	{
 		var pos = atlas.Add (rawtex);
 		if (pos.x < 0) {
 			return null;
 		}
 
+		int height;
+		if (rawtex.IsSplitAlpha) {
+			height = rawtex.Height / 2;
+		} else {
+			height = rawtex.Height;
+		}
 		var sprite = Sprite.Create(
 			atlas.Texture, 
-			new Rect(pos.x, pos.y, rawtex.Width, rawtex.Height), 
-			new Vector2(rawtex.Width / 2f, rawtex.Height / 2f), 
+			new Rect(pos.x, pos.y, rawtex.Width, height), 
+			new Vector2(rawtex.Width / 2f, height / 2f), 
 			100f, 0, SpriteMeshType.FullRect);
 
 		var dynSprite = new DynSprite {

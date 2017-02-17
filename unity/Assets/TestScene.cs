@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System;
+using UnityEngine.Profiling;
 
 public class TestScene : MonoBehaviour {
 
@@ -24,17 +25,14 @@ public class TestScene : MonoBehaviour {
 		Debug.Log (SystemInfo.copyTextureSupport);
 
 		yield return null;
-		//yield return new WaitForSeconds (1.0f);
+		yield return null;
 
-		atlas = new DynAtlas(1024);
-		//atlas.ReserveTex (TextureFormat.ARGB32);
-
-		yield return new WaitForSeconds (0.5f);
+		atlas = new DynAtlas(2048);
 
 		var dirs = new string[]{
 			//"../../sample_tsp",
-			"../../outdirtest",
-			//"../../sample2_tsp",
+			//"../../outdirtest",
+			"../../sample2_tsp",
 			//"../../sample2"
 		};
 		int ii=0;
@@ -42,8 +40,8 @@ public class TestScene : MonoBehaviour {
 			foreach( var dir in dirs ){
 				var files = Directory.GetFiles(Path.Combine (Application.dataPath, slash (dir)));
 				foreach (var f in files ){
-					if( f.EndsWith("-pvr.tsp") ){
-						Debug.Log(f);
+					if( f.EndsWith(".etc.tsp") ){
+						//Debug.Log(f);
 						atlas.Load (f);
 						ii++;
 						//if( ii > 3 ) break;
@@ -59,8 +57,6 @@ public class TestScene : MonoBehaviour {
 
 		atlasList = atlas.GetAtlases ().Values.SelectMany (i => i).ToList ();
 		OnImageClick ();
-
-		Image.texture = DynAtlas.RawTex.LastLoaded;
 
 		while (true) {
 			foreach (var sp in atlas.GetDynSprites()) {

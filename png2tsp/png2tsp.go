@@ -25,6 +25,8 @@ const (
 	Both FormatType = iota
 	PVRTC
 	ETC1
+	PVRTC_SPLIT_ALPHA
+	ETC1_SPLIT_ALPHA
 )
 
 var PvrtoolPath string
@@ -62,6 +64,10 @@ func main() {
 		format = ETC1
 	case "PVRTC":
 		format = PVRTC
+	case "ETC1_SPLIT_ALPHA":
+		format = ETC1_SPLIT_ALPHA
+	case "PVRTC_SPLIT_ALPHA":
+		format = PVRTC_SPLIT_ALPHA
 	default:
 		panic(fmt.Sprintf("unknown format %v", *optFormat))
 	}
@@ -121,6 +127,9 @@ func doBatch(format FormatType, files []string) {
 	for i := 0; i < *optJobs; i++ {
 		wg.Add(1)
 		go func() {
+			defer func() {
+				wg.Done()
+			}()
 			for infile := range ch {
 				ext := filepath.Ext(infile)
 				basename := filepath.Base(infile)
@@ -134,7 +143,6 @@ func doBatch(format FormatType, files []string) {
 
 				convert(format, infile, outfile)
 			}
-			wg.Done()
 		}()
 	}
 
@@ -149,7 +157,7 @@ func doBatch(format FormatType, files []string) {
 
 // テンポラリファイルのパスを取得する
 func tempPath(file string) string {
-	if true {
+	if false {
 		return filepath.Join(tempDir, fmt.Sprintf("%d%s", rand.Int63(), file))
 	} else {
 		// デバッグ用の実装
@@ -163,37 +171,64 @@ func floorToPowerOf2(n int) int {
 	return int(math.Pow(2, math.Ceil(math.Log2(float64(n)))))
 }
 
+func (f FormatType) SplitAlphaInfo() (bool, FormatType) {
+	switch f {
+	case PVRTC_SPLIT_ALPHA:
+		return true, PVRTC
+	case ETC1_SPLIT_ALPHA:
+		return true, ETC1
+	default:
+		return false, f
+	}
+	panic("must not reach")
+}
+
 // ファイルをTSPにコンバートする
 func convert(format FormatType, in, out string) {
 
-	inReader, err := os.Open(in)
+	r, err := os.Open(in)
 	check(err)
 
-	img, err := png.Decode(inReader)
+	img0, err := png.Decode(r)
 	check(err)
 
-	img = imageToPOT(format, img)
+	// image.NRGBAに変換する
+	img := image.NewNRGBA(img0.Bounds())
+	draw.Draw(img, img.Bounds(), img0, image.Point{0, 0}, draw.Src)
 
-	img = flipY(img) // Unity向けに上下逆転させる
-	size := img.Bounds().Size()
+	var tex *PackedTexture = nil
+	isSplitAlpha, origFormat := format.SplitAlphaInfo()
+	if isSplitAlpha {
+		// アルファ情報を分ける場合
+		// 縦が２倍のテクスチャにアルファと色情報を分けて保存される
 
-	potTex := imageToPackedTexture(format, img)
+		alphaImg := splitAlpha(img)
+		alphaTex := imageToPackedTexture(origFormat, alphaImg)
 
-	blockSizeX := int(math.Ceil(float64(size.X)/4) * 4)
-	blockSizeY := int(math.Ceil(float64(size.Y)/4) * 4)
+		colorImg := splitColor(img)
+		colorTex := imageToPackedTexture(origFormat, colorImg)
 
-	clipedTex := NewPackedTexture(format, blockSizeX, blockSizeY)
-	clipedTex.CopyFrom(potTex, 0, 0, 0, 0, blockSizeX/BlockSize, blockSizeY/BlockSize)
+		// alphaとcolorに分けたテクスチャを作成する
+		tex = NewPackedTexture(format, alphaTex.Width, alphaTex.Height*2)
+		blockSizeX := alphaTex.Width / 4
+		blockSizeY := alphaTex.Height / 4
+		tex.CopyFrom(colorTex, 0, 0, 0, 0, blockSizeX, blockSizeY)
+		tex.CopyFrom(alphaTex, 0, 0, 0, blockSizeY, blockSizeX, blockSizeY)
+
+	} else {
+		// アルファ情報を分ない場合
+		tex = imageToPackedTexture(format, img)
+	}
 
 	w, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY, 0666)
 	check(err)
 
-	clipedTex.Write(w)
+	tex.Write(w)
 }
 
 // imageを二の累乗サイズに変更する
 // PVRTCなら、縦横を合わせる
-func imageToPOT(format FormatType, img image.Image) image.Image {
+func imageToPOT(format FormatType, img *image.NRGBA) *image.NRGBA {
 	// POTサイズを取得する
 	size := img.Bounds().Size()
 	potX := floorToPowerOf2(size.X)
@@ -206,15 +241,14 @@ func imageToPOT(format FormatType, img image.Image) image.Image {
 	}
 
 	// ImageをPOTに変換する
-	potImg := image.NewRGBA(image.Rect(0, 0, potX, potY))
+	potImg := image.NewNRGBA(image.Rect(0, 0, potX, potY))
 	draw.Draw(potImg, image.Rect(0, potY-size.Y, size.X, potY), img, image.Point{0, 0}, draw.Src)
 	return potImg
 }
 
 // 画像を上下逆転させる
 // Unityが画像を反転させものを使用するため
-func flipY(img_ image.Image) image.Image {
-	img := img_.(*image.RGBA)
+func flipY(img *image.NRGBA) *image.NRGBA {
 	size := img.Bounds().Size()
 	w := size.X
 	h := size.Y
@@ -229,10 +263,45 @@ func flipY(img_ image.Image) image.Image {
 	return img
 }
 
+// アルファ成分のみの画像を作成する
+// RGBA <= AAA0
+func splitAlpha(img *image.NRGBA) *image.NRGBA {
+	size := img.Bounds().Size()
+	alphaImg := image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))
+	length := size.X * size.Y * 4
+	for i := 0; i < length; i += 4 {
+		alphaImg.Pix[i+0] = img.Pix[i+3]
+		alphaImg.Pix[i+1] = img.Pix[i+3]
+		alphaImg.Pix[i+2] = img.Pix[i+3]
+		alphaImg.Pix[i+3] = 255
+	}
+	return alphaImg
+}
+
+// カラー成分のみの画像を作成する
+// RGBA <= RGB1
+func splitColor(img *image.NRGBA) *image.NRGBA {
+	size := img.Bounds().Size()
+	alphaImg := image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))
+	length := size.X * size.Y * 4
+	for i := 0; i < length; i += 4 {
+		alphaImg.Pix[i+0] = img.Pix[i+0]
+		alphaImg.Pix[i+1] = img.Pix[i+1]
+		alphaImg.Pix[i+2] = img.Pix[i+2]
+		alphaImg.Pix[i+3] = 255
+	}
+	return alphaImg
+}
+
 // Imageをフォーマットを指定して,PackedTextureに変換する.
-// その際、TextureをPOTにサイズ変換される。
-// PVRTCならWidth,Heightともに同じサイズまで拡張される。
-func imageToPackedTexture(format FormatType, img image.Image) *PackedTexture {
+func imageToPackedTexture(format FormatType, img *image.NRGBA) *PackedTexture {
+	origSize := img.Bounds().Size() // 元画像のサイズ
+
+	img = imageToPOT(format, img) // POTにする
+
+	img = flipY(img) // Unity向けに上下逆転させる
+
+	//pngに書き出す
 	tmp_png := tempPath("image2tex.png")
 	writer, err := os.OpenFile(tmp_png, os.O_CREATE|os.O_WRONLY, 0666)
 	check(err)
@@ -240,7 +309,16 @@ func imageToPackedTexture(format FormatType, img image.Image) *PackedTexture {
 	err = png.Encode(writer, img)
 	check(err)
 
-	return pngToPackedTexture(format, tmp_png)
+	potTex := pngToPackedTexture(format, tmp_png)
+
+	// 元のサイズで読み込む
+	blockSizeX := int(math.Ceil(float64(origSize.X)/4) * 4)
+	blockSizeY := int(math.Ceil(float64(origSize.Y)/4) * 4)
+
+	clipedTex := NewPackedTexture(format, blockSizeX, blockSizeY)
+	clipedTex.CopyFrom(potTex, 0, 0, 0, 0, blockSizeX/BlockSize, blockSizeY/BlockSize)
+
+	return clipedTex
 }
 
 // PNGをフォーマットを指定して、PackedTextureに変換する
@@ -248,7 +326,7 @@ func pngToPackedTexture(format FormatType, file string) *PackedTexture {
 	var tex *PackedTexture
 	switch format {
 	case PVRTC:
-		tex = pngToPVRTC(file)
+		tex = pngToPVRTC(format, file)
 	case ETC1:
 		tex = pngToETC1(file)
 	default:
@@ -259,10 +337,16 @@ func pngToPackedTexture(format FormatType, file string) *PackedTexture {
 }
 
 // PNGをPVRTCに変換する
-func pngToPVRTC(file string) *PackedTexture {
+func pngToPVRTC(format FormatType, file string) *PackedTexture {
 	tmp_pvr := tempPath(".pvr")
 
-	args := []string{"-f", "PVRTC1_4", "-l", "-b8,8", "-i", file, "-o", tmp_pvr}
+	var formatStr string
+	if format == PVRTC {
+		formatStr = "PVRTC1_4"
+	} else {
+		formatStr = "PVRTC1_4_RGB"
+	}
+	args := []string{"-f", formatStr, "-l", "-b8,8", "-i", file, "-o", tmp_pvr}
 	if *optDither {
 		args = append([]string{"-dither"}, args...)
 	}

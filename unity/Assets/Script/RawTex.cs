@@ -13,7 +13,9 @@ public partial class DynAtlas {
 
 		public enum TSPTextureFormat {
 			PVRTC_RGBA4 = 1,
-			ETC = 2
+			ETC = 2,
+			PVRTC_RGB4_SPLIT_ALPHA = 3,
+			ETC1_SPLIT_ALPHA = 4,
 		}
 
 		const int BlockLen = 4; // ブロックの大きさのピクセル数
@@ -25,6 +27,7 @@ public partial class DynAtlas {
 		public byte[] Data { get ; private set; }
 		public Texture Texture{ get; private set; }
 		public bool IsRGB { get { return IsRGBFormat (Format); } }
+		public bool IsSplitAlpha { get; private set; }
 
 		public RawTex(Texture2D tex){
 			Format = tex.format;
@@ -33,11 +36,12 @@ public partial class DynAtlas {
 			Height = tex.height;
 		}
 
-		public RawTex(TextureFormat format, int width, int height, byte[] data = null)
+		public RawTex(TextureFormat format, int width, int height, bool isSplitAlpha, byte[] data = null)
 		{
 			Format = format;
 			Width = width;
 			Height = height;
+			IsSplitAlpha = isSplitAlpha;
 			if( IsRGBFormat(format) ){
 				Texture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
 			}else{
@@ -53,13 +57,21 @@ public partial class DynAtlas {
 		}
 
 		public void CopyRect(int srcX, int srcY, int width, int height, RawTex dest, int destX, int destY){
-			if (Format == TextureFormat.PVRTC_RGBA4) {
+			switch( Format ){
+			case TextureFormat.PVRTC_RGBA4:
+			case TextureFormat.PVRTC_RGB4:
 				CopyRectToPVR (srcX, srcY, width, height, dest, destX, destY);
-			} else if (Format == TextureFormat.ETC_RGB4) {
+				break;
+			case TextureFormat.ETC_RGB4:
 				CopyRectToETC (srcX, srcY, width, height, dest, destX, destY);
-			} else if (IsRGB) {
+				break;
+			case TextureFormat.RGBA32:
+			case TextureFormat.ARGB32:
+			case TextureFormat.RGB24:
+			case TextureFormat.RGBA4444:
 				CopyRectToRGBA (srcX, srcY, width, height, dest, destX, destY);
-			} else {
+				break;
+			default:
 				throw new Exception ("unknown texture format");
 			}
 		}
@@ -188,7 +200,7 @@ public partial class DynAtlas {
 				/*var origHeight =*/ ntol(r.ReadUInt16());
 				var data = r.ReadBytes(width * height / 2);
 
-				return new RawTex(TextureFormat.ETC_RGB4, width, height, data);
+				return new RawTex(TextureFormat.ETC_RGB4, width, height, false, data);
 			}
 
 		}
@@ -205,12 +217,21 @@ public partial class DynAtlas {
 
 				var tspFormat = (TSPTextureFormat)r.ReadByte();
 				TextureFormat format;
+				bool splitAlpha = false;
 				switch( tspFormat ){
 				case TSPTextureFormat.ETC:
 					format = TextureFormat.ETC_RGB4;
 					break;
 				case TSPTextureFormat.PVRTC_RGBA4:
 					format = TextureFormat.PVRTC_RGBA4;
+					break;
+				case TSPTextureFormat.ETC1_SPLIT_ALPHA:
+					format = TextureFormat.ETC_RGB4;
+					splitAlpha = true;
+					break;
+				case TSPTextureFormat.PVRTC_RGB4_SPLIT_ALPHA:
+					format = TextureFormat.PVRTC_RGB4;
+					splitAlpha = true;
 					break;
 				default:
 					throw new Exception ("invalid TSP format " + tspFormat);
@@ -220,7 +241,7 @@ public partial class DynAtlas {
 				var height = r.ReadUInt16();
 				var data = r.ReadBytes(width * height / 2);
 
-				return new RawTex(format, width, height, data);
+				return new RawTex(format, width, height, splitAlpha, data);
 			}
 		}
 
@@ -245,13 +266,9 @@ public partial class DynAtlas {
 				Texture2D tex = new Texture2D (width, height, TextureFormat.ARGB32, false, true);
 				tex.LoadImage (data);
 
-				LastLoaded = tex;
-
 				return new RawTex (tex);
 			}
 		}
-
-		public static Texture2D LastLoaded;
 	}
 
 }

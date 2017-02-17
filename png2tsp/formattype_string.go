@@ -4,9 +4,9 @@ package main
 
 import "fmt"
 
-const _FormatType_name = "BothPVRTCETC1"
+const _FormatType_name = "BothPVRTCETC1PVRTC_SPLIT_ALPHAETC1_SPLIT_ALPHA"
 
-var _FormatType_index = [...]uint8{0, 4, 9, 13}
+var _FormatType_index = [...]uint8{0, 4, 9, 13, 30, 46}
 
 func (i FormatType) String() string {
 	if i < 0 || i >= FormatType(len(_FormatType_index)-1) {

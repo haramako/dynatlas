@@ -40,26 +40,36 @@ end
 desc '実行ファイルを作成する'
 task :build => EXE
 
+task :clean do
+  rm_rf Dir.glob('test_image/*.tsp')
+  rm_rf ['sample_tsp', 'sample2_tsp']
+end
+
 task :test => :build do
-  sh( EXE, '-h' ) rescue nil
-  sh EXE, 'fuga.png', 'fuga.tsp'
-  sh EXE, '-f', 'PVRTC', 'fuga.png', 'fuga.pvr.tsp'
+  rm_f Dir.glob('test_image/*.tsp')
+  # sh( EXE, '-h' ) rescue nil
+  files = Dir.glob('test_image/*.png')
+  files.each do |f|
+    sh EXE, '-f', 'ETC1', f, f+'.etc.tsp'
+    sh EXE, '-f', 'PVRTC', f, f+'.pvr.tsp'
+  end
 
   mkdir_p 'outdirtest'
-  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=-etc.tsp', '-f=ETC1', 'fuga.png', 'fugahalf.png'
-  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=-pvr.tsp', '-f=PVRTC', 'fuga.png', 'fugahalf.png'
+  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=.etc.tsp', '-f=ETC1', *files
+  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=.pvr.tsp', '-f=PVRTC', *files
+  sh EXE, '-batch', '-outdir=outdirtest', '-postfix=.i.tsp', '-f=PVRTC_SPLIT_ALPHA', *files
 end
 
 task :sample => :build do
   mkdir_p 'sample_tsp'
   files = Dir.glob('sample/*.png')
-  sh EXE, '-batch', '-f=ETC1', '-outdir=sample_tsp', '-postfix=.etc.tsp', *files
-  sh EXE, '-batch', '-f=PVRTC', '-outdir=sample_tsp', '-postfix=.pvr.tsp', *files
+  sh EXE, '-batch', '-f=ETC1_SPLIT_ALPHA', '-outdir=sample_tsp', '-postfix=.etc.tsp', *files
+  sh EXE, '-batch', '-f=PVRTC_SPLIT_ALPHA', '-outdir=sample_tsp', '-postfix=.pvr.tsp', *files
 end
 
 task :sample2 => :build do
   mkdir_p 'sample2_tsp'
   files = Dir.glob('sample2/*.png')
-  sh EXE, '-batch', '-f=ETC1', '-outdir=sample2_tsp', '-postfix=.etc.tsp', *files
-  sh EXE, '-batch', '-f=PVRTC', '-outdir=sample2_tsp', '-postfix=.pvr.tsp', *files
+  sh EXE, '-batch', '-f=ETC1_SPLIT_ALPHA', '-outdir=sample2_tsp', '-postfix=.etc.tsp', *files
+  sh EXE, '-batch', '-f=PVRTC_SPLIT_ALPHA', '-outdir=sample2_tsp', '-postfix=.pvr.tsp', *files
 end

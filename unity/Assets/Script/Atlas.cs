@@ -23,10 +23,10 @@ public partial class DynAtlas {
 			size_ = size;
 			tex_ = new Texture2D(size_, size_, format, false);
 			tex_.wrapMode = TextureWrapMode.Clamp;
-			data_ = new RawTex(format, size_, size_);
+			data_ = new RawTex(format, size_, size_, false);
 			//packer_ = new Packer (size_, size_);
 			if (packer == null) {
-				packer_ = new MaxRectsPacker (size_, size_);
+				packer_ = new MaxRectsPacker (size_, size_/2);
 			} else {
 				packer_ = packer;
 			}
@@ -37,14 +37,25 @@ public partial class DynAtlas {
 		/// </summary>
 		/// <param name="rawtex">Rawtex.</param>
 		public Vector2 Add(RawTex rawtex){
-			var pos = packer_.Add (rawtex.Width, rawtex.Height);
-			if (pos.x < 0) {
-				return pos;
-			}
+			Vector2 pos;
+			if (rawtex.IsSplitAlpha) {
+				// Split alpha
+				pos = packer_.Add (rawtex.Width, rawtex.Height/2);
+				if (pos.x < 0) {
+					return pos;
+				}
 
-			Profiler.BeginSample("copy");
-			rawtex.CopyRect(0, 0, rawtex.Width, rawtex.Height, data_, (int)pos.x, (int)pos.y);
-			Profiler.EndSample();
+				rawtex.CopyRect (0, 0, rawtex.Width, rawtex.Height/2, data_, (int)pos.x, (int)pos.y);
+				rawtex.CopyRect (0, rawtex.Height/2, rawtex.Width, rawtex.Height/2, data_, (int)pos.x, (int)pos.y + Texture.height/2);
+			} else {
+				// Not split alpha
+				pos = packer_.Add (rawtex.Width, rawtex.Height);
+				if (pos.x < 0) {
+					return pos;
+				}
+
+				rawtex.CopyRect (0, 0, rawtex.Width, rawtex.Height, data_, (int)pos.x, (int)pos.y);
+			}
 
 			dirty_ = true;
 
