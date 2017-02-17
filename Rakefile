@@ -1,10 +1,32 @@
 # coding: utf-8
+require 'find'
+
+UNITY = Dir.glob('/Applications/Unity5.5*/Unity.app').first 
+MCS = UNITY + '/Contents/Mono/bin/smcs'
+
 if RUBY_PLATFORM =~ /darwin/
   EXE_EXT = ''
   EXE = './bin/png2tsp'
 else
   EXE_EXT = '.exe'
   EXE = './bin/png2tsp.exe'
+end
+
+def make_dll(dir, out, defines)
+  cs_files = Find.find(dir).select{|f| File.extname(f) == '.cs' }
+  sh MCS,
+     "-r:#{UNITY}/Contents/Managed/UnityEngine.dll",
+     "-r:#{UNITY}/Contents/Managed/UnityEditor.dll",
+     "-r:#{UNITY}/Contents/UnityExtensions/Unity/GUISystem/UnityEngine.UI.dll",
+     "-target:library",
+     "-out:#{out}",
+     *defines.map{|x| "-define:#{x}" },
+     *cs_files
+end
+
+desc 'C#のDLLを作成する'
+task :dll do
+  make_dll('unity/Assets/Script', 'DynAtlas.dll', ["UNITY_5_5_OR_NEWER", "UNITY_ANDROID"])
 end
 
 file EXE => Dir.glob('png2tsp/*.go') do
