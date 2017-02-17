@@ -172,20 +172,10 @@ func convert(format FormatType, in, out string) {
 	img, err := png.Decode(inReader)
 	check(err)
 
+	img = imageToPOT(format, img)
+
+	img = flipY(img) // Unity向けに上下逆転させる
 	size := img.Bounds().Size()
-	pot_x := floorToPowerOf2(size.X)
-	pot_y := floorToPowerOf2(size.Y)
-
-	if format == PVRTC {
-		pot_x = int(math.Max(float64(pot_x), float64(pot_y)))
-		pot_y = pot_x
-	}
-
-	pot_img := image.NewRGBA(image.Rect(0, 0, pot_x, pot_y))
-	draw.Draw(pot_img, image.Rect(0, pot_y-size.Y, size.X, pot_y), img, image.Point{0, 0}, draw.Src)
-	img = pot_img
-
-	img = flipY(img)
 
 	potTex := imageToPackedTexture(format, img)
 
@@ -201,13 +191,33 @@ func convert(format FormatType, in, out string) {
 	clipedTex.Write(w)
 }
 
+// imageを二の累乗サイズに変更する
+// PVRTCなら、縦横を合わせる
+func imageToPOT(format FormatType, img image.Image) image.Image {
+	// POTサイズを取得する
+	size := img.Bounds().Size()
+	potX := floorToPowerOf2(size.X)
+	potY := floorToPowerOf2(size.Y)
+
+	// PVRTCなら、正方形にする
+	if format == PVRTC {
+		potX = int(math.Max(float64(potX), float64(potY)))
+		potY = potX
+	}
+
+	// ImageをPOTに変換する
+	potImg := image.NewRGBA(image.Rect(0, 0, potX, potY))
+	draw.Draw(potImg, image.Rect(0, potY-size.Y, size.X, potY), img, image.Point{0, 0}, draw.Src)
+	return potImg
+}
+
 // 画像を上下逆転させる
 // Unityが画像を反転させものを使用するため
 func flipY(img_ image.Image) image.Image {
 	img := img_.(*image.RGBA)
-	bounds := img.Bounds()
-	w := bounds.Size().X
-	h := bounds.Size().Y
+	size := img.Bounds().Size()
+	w := size.X
+	h := size.Y
 	var x, y int
 	for y = 0; y < h/2; y++ {
 		for x = 0; x < w; x++ {
